@@ -412,24 +412,45 @@ function addVariantRow(text, pos, checked = false) {
   $("variants").append(el("label", {}, cb, el("span", { textContent: text }), el("span", { className: "pos", textContent: pos || "" })));
 }
 
+let lookupSeq = 0;   // щоб застаріла відповідь не перезаписала свіжу
+
 async function findTranslations() {
+  clearTimeout(autoTimer);
   const word = $("newWord").value.trim();
   if (!word) return;
-  $("cardError").textContent = ""; $("findBtn").disabled = true;
+  if (/[а-яіїєґё]/i.test(word)) {
+    $("cardError").textContent = "Введіть англійське слово латиницею — переклад буде українською.";
+    return;
+  }
+  const seq = ++lookupSeq;
+  $("cardError").textContent = ""; $("findBtn").disabled = true; $("findBtn").textContent = "Шукаю…";
   try {
     const data = await api("/api/translate?word=" + encodeURIComponent(word));
+    if (seq !== lookupSeq) return;
     currentWord = data.word;
     $("variants").innerHTML = "";
     data.variants.forEach(v => addVariantRow(v.text, v.pos));
     $("variantsBlock").classList.remove("hidden");
   } catch (e) {
+    if (seq !== lookupSeq) return;
     // Перекладач недоступний — даємо ввести переклад вручну
     currentWord = word; $("variants").innerHTML = "";
     $("variantsBlock").classList.remove("hidden");
     $("cardError").textContent = e.message;
-  } finally { $("findBtn").disabled = false; }
+  } finally {
+    if (seq === lookupSeq) { $("findBtn").disabled = false; $("findBtn").textContent = "Знайти переклад"; }
+  }
 }
 $("findBtn").onclick = findTranslations;
+
+// Автоматичний пошук: перекладаємо, щойно користувач перестав друкувати
+let autoTimer;
+$("newWord").addEventListener("input", () => {
+  clearTimeout(autoTimer);
+  const word = $("newWord").value.trim();
+  if (word.length < 2) return;
+  autoTimer = setTimeout(findTranslations, 700);
+});
 $("newWord").onkeydown = (e) => { if (e.key === "Enter") findTranslations(); };
 
 $("addCustomBtn").onclick = () => {

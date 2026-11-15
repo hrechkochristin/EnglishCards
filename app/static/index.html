@@ -338,7 +338,9 @@ async function api(path, options = {}) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const d = data.detail;
-    throw new Error(Array.isArray(d) ? d.map(humanError).join("; ") : (d || "Помилка"));
+    const err = new Error(Array.isArray(d) ? d.map(humanError).join("; ") : (d || "Помилка"));
+    err.status = res.status;
+    throw err;
   }
   return data;
 }
@@ -414,6 +416,61 @@ function addVariantRow(text, pos, checked = false) {
 
 let lookupSeq = 0;   // щоб застаріла відповідь не перезаписала свіжу
 
+// ---- Переклад прямо з браузера (запасний шлях) ----
+const hasLatin = (s) => /[a-z]/i.test(s);
+
+function dedupeVariants(list, word) {
+  const seen = new Set(), out = [];
+  for (const v of list) {
+    const text = (v.text || "").replace(/\s+/g, " ").trim();
+    const key = text.toLowerCase();
+    if (!text || seen.has(key) || key === word.toLowerCase()) continue;
+    seen.add(key); out.push({ ...v, text });
+  }
+  return out;
+}
+
+async function fetchJson(url) {
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return res.json();
+}
+
+const browserProviders = [
+  // Google з усіма словниковими варіантами
+  async (w) => {
+    const d = await fetchJson("https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=uk&dt=t&dt=bd&dj=1&q=" + encodeURIComponent(w));
+    const main = (d.sentences || []).map(s => s.trans || "").join("").trim();
+    const dict = (d.dict || []).flatMap(g => (g.entry || []).map(e => ({ text: e.word, pos: g.pos, score: e.score || 0 })));
+    dict.sort((a, b) => b.score - a.score);
+    return [...(main ? [{ text: main, pos: null }] : []), ...dict];
+  },
+  // MyMemory
+  async (w) => {
+    const d = await fetchJson("https://api.mymemory.translated.net/get?langpair=en|uk&q=" + encodeURIComponent(w));
+    if (String(d.responseStatus) !== "200") throw new Error("MyMemory " + d.responseStatus);
+    let main = d.responseData?.translatedText || "";
+    if (main === main.toUpperCase()) main = main.toLowerCase();
+    const matches = (d.matches || []).map(m => m.translation || "").filter(t => t && t.length <= 60 && !hasLatin(t));
+    return [main, ...matches].map(text => ({ text, pos: null }));
+  },
+  // Google (endpoint розширення Chrome) — один переклад
+  async (w) => {
+    const d = await fetchJson("https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=en&tl=uk&q=" + encodeURIComponent(w));
+    return (Array.isArray(d) ? d : []).map(x => ({ text: Array.isArray(x) ? x[0] : x, pos: null }));
+  },
+];
+
+async function translateInBrowser(word) {
+  for (const provider of browserProviders) {
+    try {
+      const variants = dedupeVariants(await provider(word), word);
+      if (variants.length) return variants;
+    } catch (e) { console.warn("Перекладач у браузері:", e); }
+  }
+  return [];
+}
+
 async function findTranslations() {
   clearTimeout(autoTimer);
   const word = $("newWord").value.trim();
@@ -425,7 +482,17 @@ async function findTranslations() {
   const seq = ++lookupSeq;
   $("cardError").textContent = ""; $("findBtn").disabled = true; $("findBtn").textContent = "Шукаю…";
   try {
-    const data = await api("/api/translate?word=" + encodeURIComponent(word));
+    let data;
+    try {
+      data = await api("/api/translate?word=" + encodeURIComponent(word));
+    } catch (serverErr) {
+      // Сервер не дістався до перекладача (на Render його часто блокують) — перекладаємо з браузера.
+      // Помилки на кшталт «неправильне слово» чи «увійдіть знову» показуємо як є.
+      if (!token || (serverErr.status && serverErr.status < 500)) throw serverErr;
+      const variants = await translateInBrowser(word);
+      if (!variants.length) throw serverErr;
+      data = { word: word.toLowerCase().replace(/\s+/g, " "), variants };
+    }
     if (seq !== lookupSeq) return;
     currentWord = data.word;
     $("variants").innerHTML = "";
@@ -460,9 +527,10 @@ $("addCustomBtn").onclick = () => {
 
 $("saveCardBtn").onclick = async () => {
   const chosen = [...$("variants").querySelectorAll("input:checked")].map(i => i.value);
+  const options = [...$("variants").querySelectorAll("input")].map(i => i.value).slice(0, 50);
   $("cardError").textContent = "";
   try {
-    await api("/api/cards", { method: "POST", body: JSON.stringify({ word: currentWord, translations: chosen }) });
+    await api("/api/cards", { method: "POST", body: JSON.stringify({ word: currentWord, translations: chosen, options }) });
     $("newWord").value = ""; $("variants").innerHTML = "";
     $("variantsBlock").classList.add("hidden"); currentWord = null;
     loadCards();

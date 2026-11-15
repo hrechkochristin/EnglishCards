@@ -151,7 +151,8 @@ async def create_card(
     try:
         options = [v["text"] for v in await translator.translate(word)]
     except translator.TranslatorUnavailable:
-        options = []
+        # Сервер заблоковано (буває на хмарному хостингу) — беремо варіанти, які знайшов браузер
+        options = clean_translations(data.options or [])
 
     if not chosen:
         # Користувач нічого не обрав — беремо 3 найпопулярніші

@@ -72,6 +72,8 @@ class CardCreate(BaseModel):
     word: str = Field(min_length=1, max_length=100)
     # Якщо None або порожній список — збережемо 3 найпопулярніші переклади
     translations: list[str] | None = None
+    # Усі варіанти, які знайшов браузер, якщо серверний перекладач був недоступний
+    options: list[str] | None = Field(default=None, max_length=50)
 
 
 class CardUpdate(BaseModel):

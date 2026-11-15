@@ -3,8 +3,11 @@
 1) Основне джерело — публічний endpoint Google Translate (client=gtx). Він безкоштовний,
    без ключа, і, що головне, повертає словникові варіанти з оцінкою популярності (score).
    Це неофіційний API: він може змінитися або обмежити частоту запитів.
+   Якщо translate.googleapis.com заблоковано (часто буває на хмарних серверах),
+   пробуємо той самий запит на translate.google.com.
 2) Запасний варіант — MyMemory (api.mymemory.translated.net), теж безкоштовний і без ключа
    (ліміт близько 5000 символів на день з однієї IP; більше, якщо задати MYMEMORY_EMAIL).
+3) Останній шанс — endpoint розширення Chrome (clients5.google.com), дає один переклад.
 
 Результати кешуються в пам'яті, щоб не смикати API повторно для того самого слова.
 """
@@ -21,6 +24,10 @@ TARGET_LANG = os.getenv("TARGET_LANG", "uk")
 MYMEMORY_EMAIL = os.getenv("MYMEMORY_EMAIL", "")
 
 GOOGLE_URL = "https://translate.googleapis.com/translate_a/single"
+# Той самий endpoint на іншому хості: хмарні сервери (Render тощо) блокують рідше
+GOOGLE_URL_ALT = "https://translate.google.com/translate_a/single"
+# Endpoint розширення Chrome: лише один переклад, але працює, коли інші обмежені
+GOOGLE_CHROME_URL = "https://clients5.google.com/translate_a/t"
 MYMEMORY_URL = "https://api.mymemory.translated.net/get"
 
 _TIMEOUT = httpx.Timeout(8.0)
@@ -83,19 +90,49 @@ def parse_mymemory(data: dict, word: str) -> list[dict]:
     matches = sorted(matches, key=lambda m: float(m.get("match") or 0), reverse=True)
     for m in matches:
         text = m.get("translation") or ""
+        # Збіги з пам'яті перекладів бувають сміттям (з англійським текстом усередині)
+        if any("a" <= ch.lower() <= "z" for ch in text):
+            continue
         if text and len(text) <= 60:
             variants.append({"text": text, "pos": None, "score": float(m.get("match") or 0)})
     return _dedupe(variants, word)
 
 
-async def _google(client: httpx.AsyncClient, word: str) -> list[dict]:
-    params = [
+def _gtx_params(word: str) -> list[tuple[str, str]]:
+    return [
         ("client", "gtx"), ("sl", SOURCE_LANG), ("tl", TARGET_LANG),
         ("dt", "t"), ("dt", "bd"), ("dj", "1"), ("q", word),
     ]
-    r = await client.get(GOOGLE_URL, params=params)
+
+
+async def _google(client: httpx.AsyncClient, word: str) -> list[dict]:
+    r = await client.get(GOOGLE_URL, params=_gtx_params(word))
     r.raise_for_status()
     return parse_google(r.json(), word)
+
+
+async def _google_alt(client: httpx.AsyncClient, word: str) -> list[dict]:
+    r = await client.get(GOOGLE_URL_ALT, params=_gtx_params(word))
+    r.raise_for_status()
+    return parse_google(r.json(), word)
+
+
+def parse_google_chrome(data, word: str) -> list[dict]:
+    # Відповідь виглядає як ["бігти"] або [["бігти", "en"]]
+    texts = []
+    for item in data if isinstance(data, list) else []:
+        if isinstance(item, str):
+            texts.append(item)
+        elif isinstance(item, list) and item and isinstance(item[0], str):
+            texts.append(item[0])
+    return _dedupe([{"text": t, "pos": None, "score": 1.0} for t in texts], word)
+
+
+async def _google_chrome(client: httpx.AsyncClient, word: str) -> list[dict]:
+    params = {"client": "dict-chrome-ex", "sl": SOURCE_LANG, "tl": TARGET_LANG, "q": word}
+    r = await client.get(GOOGLE_CHROME_URL, params=params)
+    r.raise_for_status()
+    return parse_google_chrome(r.json(), word)
 
 
 async def _mymemory(client: httpx.AsyncClient, word: str) -> list[dict]:
@@ -116,7 +153,7 @@ async def translate(word: str) -> list[dict]:
 
     async with httpx.AsyncClient(timeout=_TIMEOUT, headers={"User-Agent": "Mozilla/5.0"}) as client:
         variants: list[dict] = []
-        for provider in (_google, _mymemory):
+        for provider in (_google, _google_alt, _mymemory, _google_chrome):
             try:
                 variants = await provider(client, word)
             except (httpx.HTTPError, ValueError) as e:

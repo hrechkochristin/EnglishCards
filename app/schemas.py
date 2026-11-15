@@ -87,7 +87,13 @@ class CardOut(BaseModel):
     options: list[str]
     correct_count: int
     wrong_count: int
+    archived: bool = False
+    archived_at: datetime | None = None
     created_at: datetime
+
+
+class ArchiveIn(BaseModel):
+    archived: bool
 
 
 class ReviewIn(BaseModel):

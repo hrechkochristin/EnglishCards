@@ -137,13 +137,65 @@
   .card-item .muted { margin-top:6px; font-size:13px; }
   .card-item .actions { display:flex; gap:2px; flex-shrink:0; }
   .card-item .variants { margin:10px 0; }
+  .card-item.is-archived { background:#f8fbfd; }
+  .card-item.is-archived .word { color:var(--ink-soft); }
+  .card-item.is-archived::after { background:#b7c4cf; }
+  .badge {
+    display:inline-block; vertical-align:middle; margin-left:8px; padding:2px 9px; border-radius:999px;
+    font-size:11px; font-weight:700; letter-spacing:.02em;
+  }
+  .badge.learned { background:#e3f6ec; color:#1f8a5b; }
+  .badge.arch { background:#edf1f5; color:var(--muted); }
+  button.archive { color:var(--ink-soft); }
 
-  /* Гра: велика картка на стосі карток */
-  .flash { text-align:center; padding:56px 20px 40px; min-height:320px;
-           display:flex; flex-direction:column; justify-content:center; box-shadow:var(--shadow-lg); margin-top:12px; }
-  .flash::before { transform:translateY(10px) rotate(-2.2deg); }
-  .flash::after  { transform:translateY(16px) rotate(2.6deg); }
-  .flash > .muted { position:absolute; top:18px; left:0; right:0; font-weight:700; letter-spacing:.06em; }
+  .list-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .seg { display:inline-flex; gap:4px; padding:4px; background:var(--accent-soft); border-radius:12px; }
+  .seg button { background:transparent; color:var(--ink-soft); box-shadow:none; padding:7px 14px; font-size:14px; border-radius:9px; }
+  .seg button:hover { background:rgba(255,255,255,.7); transform:none; box-shadow:none; }
+  .seg button.active { background:#fff; color:var(--ink); box-shadow:0 2px 6px rgba(40,90,140,.12); }
+  .seg button span { color:var(--muted); font-weight:600; }
+
+  /* Гра: картка на стосі карток, яку можна свайпати */
+  .deck { position:relative; margin:12px 0 34px; }
+  .deck-back {
+    position:absolute; inset:0; border-radius:var(--radius); box-shadow:var(--shadow);
+    transition:transform .3s ease;
+  }
+  .deck-back.b1 { background:var(--card-2); transform:translateY(10px) rotate(-2.2deg); }
+  .deck-back.b2 { background:var(--card-3); transform:translateY(18px) rotate(2.6deg); }
+  .deck.dragging .deck-back.b1 { transform:translateY(5px) rotate(-1deg) scale(.99); }
+  .flash {
+    position:relative; z-index:1; overflow:hidden;
+    background:var(--card); border:1px solid rgba(255,255,255,.9); border-radius:var(--radius);
+    box-shadow:var(--shadow-lg);
+    text-align:center; padding:56px 20px 44px; min-height:340px;
+    display:flex; flex-direction:column; justify-content:center;
+    touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab;
+    transition:transform .35s cubic-bezier(.2,.8,.3,1), opacity .35s;
+  }
+  .flash:active { cursor:grabbing; }
+  .flash.fade-in { animation:cardIn .3s ease-out; }
+  @keyframes cardIn { from { opacity:0; transform:translateY(14px) scale(.96); } to { opacity:1; transform:none; } }
+  .flash > .progress { position:absolute; top:18px; left:0; right:0; font-weight:700; letter-spacing:.06em; }
+  .tap-hint { position:absolute; bottom:16px; left:0; right:0; font-size:12px; color:#a3aeb9; font-weight:600; }
+  .stamp {
+    position:absolute; padding:6px 14px; border:3px solid currentColor; border-radius:12px;
+    font-weight:800; font-size:18px; letter-spacing:.06em; text-transform:uppercase;
+    opacity:0; pointer-events:none; background:rgba(255,255,255,.85);
+  }
+  .stamp.yes  { top:22px; left:20px;  color:var(--ok);  transform:rotate(-12deg); }
+  .stamp.no   { top:22px; right:20px; color:var(--bad); transform:rotate(12deg); }
+  .stamp.arch { bottom:22px; left:50%; color:var(--ink-soft); transform:translateX(-50%); }
+  .game-btns { justify-content:center; }
+  .game-btns button { min-width:110px; }
+  .swipe-help { text-align:center; margin-top:14px; font-size:13px; line-height:1.6; }
+  .toast {
+    position:fixed; left:50%; bottom:24px; transform:translate(-50%, 20px); opacity:0; z-index:10;
+    background:var(--ink); color:#fff; padding:12px 18px; border-radius:14px; font-weight:600; font-size:14px;
+    box-shadow:0 10px 30px rgba(43,48,54,.3); transition:opacity .25s, transform .25s; pointer-events:none;
+    max-width:calc(100% - 32px); text-align:center;
+  }
+  .toast.show { opacity:1; transform:translate(-50%, 0); }
   .flash .q { font-size:38px; font-weight:800; letter-spacing:-.02em; color:var(--ink); word-break:break-word; }
   .flash .a { font-size:22px; font-weight:700; color:var(--accent-dark); margin-top:16px; min-height:30px; }
   .flash .a:not(:empty) { animation:pop .25s ease-out; }
@@ -173,6 +225,7 @@
   @media (max-width:480px) {
     .flash .q { font-size:30px; }
     .tabs button { font-size:13px; padding:9px 4px; }
+    .game-btns button { min-width:0; flex:1 1 40%; }
   }
 </style>
 </head>
@@ -232,23 +285,40 @@
         <div id="cardError" class="error"></div>
       </div>
       <div class="box">
+        <div class="list-head">
+          <div class="seg">
+            <button data-view="active" class="active">Активні <span id="activeCount"></span></button>
+            <button data-view="archived">Архів <span id="archivedCount"></span></button>
+          </div>
+        </div>
         <div class="muted" id="cardsCount"></div>
         <div id="cardsList"></div>
       </div>
     </div>
 
     <div id="tab-game" class="hidden">
-      <div class="box flash">
-        <div class="muted" id="gameProgress"></div>
-        <div class="q" id="gameQ"></div>
-        <div class="a" id="gameA"></div>
-        <div class="row" style="justify-content:center; margin-top:24px;">
-          <button id="showBtn" class="primary">Показати відповідь</button>
-          <button id="knewBtn" class="hidden ok">Знав ✓</button>
-          <button id="didntBtn" class="hidden bad">Не знав ✗</button>
-          <button id="restartBtn" class="hidden primary">Грати ще</button>
+      <div class="deck">
+        <div class="deck-back b2"></div>
+        <div class="deck-back b1"></div>
+        <div class="flash" id="flash">
+          <div class="stamp yes" id="stampYes">Знаю</div>
+          <div class="stamp no" id="stampNo">Не знаю</div>
+          <div class="stamp arch" id="stampArch">В архів</div>
+          <div class="muted progress" id="gameProgress"></div>
+          <div class="q" id="gameQ"></div>
+          <div class="a" id="gameA"></div>
+          <div class="tap-hint" id="tapHint">натисни, щоб побачити переклад</div>
         </div>
       </div>
+      <div class="row game-btns">
+        <button id="didntBtn" class="bad" title="Свайп вліво · ←">✗ Не знаю</button>
+        <button id="showBtn" class="primary" title="Пробіл">Показати</button>
+        <button id="archBtn" class="secondary" title="Свайп вниз · ↓">↓ В архів</button>
+        <button id="knewBtn" class="ok" title="Свайп вправо · →">Знаю ✓</button>
+        <button id="restartBtn" class="hidden primary">Грати ще</button>
+      </div>
+      <div class="muted swipe-help" id="swipeHelp">Свайп: <b>→</b> знаю · <b>←</b> не знаю · <b>↓</b> в архів.
+        Слово, яке вгадав 10 разів, само переходить в архів.</div>
     </div>
   </section>
 </main>
@@ -379,22 +449,66 @@ $("saveCardBtn").onclick = async () => {
 };
 
 // ---------- Список карток ----------
+let listView = "active";   // "active" | "archived"
+const AUTO_ARCHIVE_AFTER = 10;   // має збігатися з AUTO_ARCHIVE_AFTER у main.py
+
+// Слово вважаємо вивченим: ≥5 правильних відповідей і помилок не більше третини від них
+const isLearned = (c) => c.correct_count >= 5 && c.wrong_count * 3 <= c.correct_count;
+
+document.querySelectorAll(".seg button").forEach(btn => btn.onclick = () => {
+  listView = btn.dataset.view;
+  document.querySelectorAll(".seg button").forEach(b => b.classList.toggle("active", b === btn));
+  loadCards();
+});
+
 async function loadCards() {
-  const cards = await api("/api/cards");
-  $("cardsCount").textContent = cards.length ? `Карток: ${cards.length}` : "Карток ще немає — додайте першу.";
+  const all = await api("/api/cards");
+  const active = all.filter(c => !c.archived);
+  const archived = all.filter(c => c.archived)
+    .sort((a, b) => (b.archived_at || "").localeCompare(a.archived_at || ""));
+  $("activeCount").textContent = active.length || "";
+  $("archivedCount").textContent = archived.length || "";
+
+  const cards = listView === "active" ? active : archived;
+  if (listView === "active") {
+    const learned = active.filter(isLearned).length;
+    $("cardsCount").textContent = !all.length ? "Карток ще немає — додайте першу."
+      : !active.length ? "Усі слова в архіві — додайте нові!"
+      : learned ? `Вивчено: ${learned} — їх можна прибрати в архів, щоб не заважали.` : "";
+  } else {
+    $("cardsCount").textContent = archived.length
+      ? "Архівні слова не показуються в списку і не потрапляють у гру."
+      : "Архів порожній. Сюди потрапляють вивчені слова.";
+  }
   $("cardsList").innerHTML = "";
   cards.forEach(c => $("cardsList").append(renderCard(c)));
 }
 
+async function setArchived(c, archived) {
+  await api(`/api/cards/${c.id}/archive`, { method: "POST", body: JSON.stringify({ archived }) });
+  loadCards();
+}
+
 function renderCard(c) {
+  const title = el("div", { className: "word", textContent: c.word });
+  if (c.archived) title.append(el("span", { className: "badge arch", textContent: "в архіві" }));
+  else if (isLearned(c)) title.append(el("span", { className: "badge learned", textContent: "вивчено" }));
   const info = el("div", {},
-    el("div", { className: "word", textContent: c.word }),
+    title,
     el("div", { className: "tr", textContent: c.translations.join(", ") }),
-    el("div", { className: "muted", textContent: `✓ ${c.correct_count}  ✗ ${c.wrong_count}` }),
+    el("div", { className: "muted", textContent: `✓ ${c.correct_count}  ✗ ${c.wrong_count}` +
+      (!c.archived && c.correct_count < AUTO_ARCHIVE_AFTER ? `  ·  до архіву ще ${AUTO_ARCHIVE_AFTER - c.correct_count} ✓` : "") }),
   );
   const editBtn = el("button", { className: "link", textContent: "змінити" });
   const delBtn = el("button", { className: "danger", textContent: "видалити" });
-  const item = el("div", { className: "card-item" }, info, el("div", { className: "actions" }, editBtn, delBtn));
+  const archBtn = el("button", {
+    className: "link archive",
+    textContent: c.archived ? "повернути" : "в архів",
+    title: c.archived ? "Повернути слово до активних і в гру" : "Сховати вивчене слово зі списку і гри",
+  });
+  archBtn.onclick = () => setArchived(c, !c.archived);
+  const item = el("div", { className: "card-item" + (c.archived ? " is-archived" : "") },
+    info, el("div", { className: "actions" }, archBtn, editBtn, delBtn));
 
   delBtn.onclick = async () => {
     if (!confirm(`Видалити «${c.word}»?`)) return;
@@ -420,10 +534,22 @@ function renderCard(c) {
 }
 
 // ---------- Гра ----------
+let gameState = "none";      // none | question | answer | done | busy
+let reviewed = 0, archivedInGame = 0;
+const SWIPE_X = 100, SWIPE_Y = 110;   // скільки треба протягнути, щоб зарахувати свайп
+
+let toastTimer;
+function toast(msg) {
+  let t = document.querySelector(".toast");
+  if (!t) { t = el("div", { className: "toast" }); document.body.append(t); }
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2800);
+}
+
 async function startGame(mode) {
   gameMode = mode;
   deck = await api(`/api/game/deck?mode=${mode}&limit=500`);
-  deckPos = 0; score = 0;
+  deckPos = 0; score = 0; reviewed = 0; archivedInGame = 0;
   if (!deck.length) {
     $("gameProgress").textContent = ""; $("gameQ").textContent = "Спершу додайте кілька карток";
     $("gameA").textContent = ""; setButtons("none"); return;
@@ -432,10 +558,16 @@ async function startGame(mode) {
 }
 
 function setButtons(state) {
+  gameState = state;
+  const playing = state === "question" || state === "answer";
   $("showBtn").classList.toggle("hidden", state !== "question");
-  $("knewBtn").classList.toggle("hidden", state !== "answer");
-  $("didntBtn").classList.toggle("hidden", state !== "answer");
+  $("knewBtn").classList.toggle("hidden", !playing);
+  $("didntBtn").classList.toggle("hidden", !playing);
+  $("archBtn").classList.toggle("hidden", !playing);
   $("restartBtn").classList.toggle("hidden", state !== "done");
+  $("tapHint").classList.toggle("hidden", state !== "question");
+  $("swipeHelp").classList.toggle("hidden", !playing);
+  $("flash").style.cursor = playing ? "" : "default";
 }
 
 function showQuestion() {
@@ -446,21 +578,126 @@ function showQuestion() {
   setButtons("question");
 }
 
-$("showBtn").onclick = () => { $("gameA").textContent = deck[deckPos].answer; setButtons("answer"); };
+function reveal() {
+  if (gameState !== "question") return;
+  $("gameA").textContent = deck[deckPos].answer;
+  setButtons("answer");
+}
+$("showBtn").onclick = reveal;
 
-async function answer(knew) {
-  if (knew) score++;
-  api(`/api/cards/${deck[deckPos].card_id}/review`, { method: "POST", body: JSON.stringify({ knew }) }).catch(() => {});
+// dir: "right" — знаю, "left" — не знаю, "down" — в архів
+function act(dir) {
+  const item = deck[deckPos];
+  if (dir === "down") {
+    archivedInGame++;
+    api(`/api/cards/${item.card_id}/archive`, { method: "POST", body: JSON.stringify({ archived: true }) })
+      .then(() => toast("Слово перенесено в архів")).catch(() => {});
+  } else {
+    const knew = dir === "right";
+    if (knew) score++;
+    reviewed++;
+    api(`/api/cards/${item.card_id}/review`, { method: "POST", body: JSON.stringify({ knew }) })
+      .then(card => {
+        if (knew && card.archived) toast(`«${card.word}» вгадано ${card.correct_count} разів — слово вивчено й перенесено в архів 🎉`);
+      }).catch(() => {});
+  }
   deckPos++;
   if (deckPos < deck.length) return showQuestion();
   $("gameProgress").textContent = "";
-  $("gameQ").textContent = `Готово! ${score} з ${deck.length}`;
-  $("gameA").textContent = "";
+  $("gameQ").textContent = reviewed ? `Готово! ${score} з ${reviewed}` : "Готово!";
+  $("gameA").textContent = archivedInGame ? `В архів: ${archivedInGame}` : "";
   setButtons("done");
 }
-$("knewBtn").onclick = () => answer(true);
-$("didntBtn").onclick = () => answer(false);
+
+// ---- Свайпи ----
+const flash = $("flash");
+const stamps = { right: $("stampYes"), left: $("stampNo"), down: $("stampArch") };
+let drag = null;
+
+function swipeDir(dx, dy) {
+  if (dy > SWIPE_Y && dy > Math.abs(dx)) return "down";
+  if (dx > SWIPE_X) return "right";
+  if (dx < -SWIPE_X) return "left";
+  return null;
+}
+
+function paintStamps(dx, dy) {
+  const down = dy > Math.abs(dx);
+  stamps.right.style.opacity = !down && dx > 0 ? Math.min(dx / SWIPE_X, 1) : 0;
+  stamps.left.style.opacity = !down && dx < 0 ? Math.min(-dx / SWIPE_X, 1) : 0;
+  stamps.down.style.opacity = down && dy > 0 ? Math.min(dy / SWIPE_Y, 1) : 0;
+}
+
+function resetCard(animate = true) {
+  flash.style.transition = animate ? "" : "none";
+  flash.style.transform = ""; flash.style.opacity = "";
+  paintStamps(0, 0);
+  flash.parentElement.classList.remove("dragging");
+}
+
+// Картка вилітає в бік свайпу, потім з'являється наступна
+function flyOut(dir, dx = 0, dy = 0) {
+  if (gameState !== "question" && gameState !== "answer") return;
+  gameState = "busy";
+  const w = window.innerWidth;
+  const target = {
+    right: `translate(${w}px, ${dy}px) rotate(28deg)`,
+    left: `translate(${-w}px, ${dy}px) rotate(-28deg)`,
+    down: `translate(${dx}px, ${window.innerHeight}px) rotate(${dx / 20}deg)`,
+  }[dir];
+  paintStamps(dir === "right" ? SWIPE_X : dir === "left" ? -SWIPE_X : 0, dir === "down" ? SWIPE_Y : 0);
+  flash.style.transition = "";
+  flash.style.transform = target; flash.style.opacity = "0";
+  setTimeout(() => {
+    resetCard(false);
+    act(dir);
+    flash.classList.remove("fade-in"); void flash.offsetWidth; flash.classList.add("fade-in");
+  }, 300);
+}
+
+flash.addEventListener("pointerdown", (e) => {
+  if (gameState !== "question" && gameState !== "answer") return;
+  drag = { x: e.clientX, y: e.clientY, dx: 0, dy: 0, moved: false };
+  flash.setPointerCapture(e.pointerId);
+  flash.style.transition = "none";
+  flash.parentElement.classList.add("dragging");
+});
+flash.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  drag.dx = e.clientX - drag.x;
+  drag.dy = Math.max(e.clientY - drag.y, -40);   // вгору тягнути майже не даємо
+  if (Math.hypot(drag.dx, drag.dy) > 6) drag.moved = true;
+  flash.style.transform = `translate(${drag.dx}px, ${drag.dy}px) rotate(${drag.dx / 18}deg)`;
+  paintStamps(drag.dx, drag.dy);
+});
+function endDrag() {
+  if (!drag) return;
+  const { dx, dy, moved } = drag;
+  drag = null;
+  const dir = swipeDir(dx, dy);
+  if (dir) return flyOut(dir, dx, dy);
+  resetCard();
+  if (!moved) reveal();          // простий тап — показати переклад
+}
+flash.addEventListener("pointerup", endDrag);
+flash.addEventListener("pointercancel", () => { drag = null; resetCard(); });
+
+$("knewBtn").onclick = () => flyOut("right");
+$("didntBtn").onclick = () => flyOut("left");
+$("archBtn").onclick = () => flyOut("down");
 $("restartBtn").onclick = () => startGame(gameMode);
+
+// Клавіатура: → знаю, ← не знаю, ↓ в архів, пробіл/Enter — показати
+document.addEventListener("keydown", (e) => {
+  if ($("tab-game").classList.contains("hidden") || $("app").classList.contains("hidden")) return;
+  if (e.target.matches("input, textarea")) return;
+  const dir = { ArrowRight: "right", ArrowLeft: "left", ArrowDown: "down" }[e.key];
+  if (dir) { e.preventDefault(); flyOut(dir); }
+  else if (e.key === " " || e.key === "Enter") {
+    if (e.target.tagName === "BUTTON") return;
+    e.preventDefault(); reveal();
+  }
+});
 
 // ---------- Старт ----------
 if (token) api("/api/me").then(u => showApp(u.username)).catch(logout);

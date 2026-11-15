@@ -5,21 +5,22 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from . import translator
 from .auth import create_token, get_current_user, hash_password, verify_password
 from .db import Base, engine, get_db
-from .models import Card, User
+from .models import Card, User, utcnow
 from .schemas import (
-    CardCreate, CardOut, CardUpdate, Credentials, GameItem, GameMode, RegisterCredentials,
+    ArchiveIn, CardCreate, CardOut, CardUpdate, Credentials, GameItem, GameMode, RegisterCredentials,
     ReviewIn, TokenOut, TranslateOut, UserOut,
 )
 
 STATIC_DIR = Path(__file__).parent / "static"
 DEFAULT_TRANSLATIONS = 3
+AUTO_ARCHIVE_AFTER = 10  # скільки правильних відповідей — і слово йде в архів
 _WORD_RE = re.compile(r"^[A-Za-z][A-Za-z '\-]*$")
 
 
@@ -27,7 +28,19 @@ _WORD_RE = re.compile(r"^[A-Za-z][A-Za-z '\-]*$")
 async def lifespan(_app: FastAPI):
     # Створює таблиці users і cards, якщо їх ще немає
     Base.metadata.create_all(bind=engine)
+    add_missing_columns()
     yield
+
+
+def add_missing_columns():
+    """create_all не додає нові колонки до вже існуючих таблиць — докидаємо їх вручну."""
+    columns = {c["name"] for c in inspect(engine).get_columns("cards")}
+    ts_type = "TIMESTAMP WITH TIME ZONE" if engine.dialect.name == "postgresql" else "DATETIME"
+    with engine.begin() as conn:
+        if "archived" not in columns:
+            conn.execute(text("ALTER TABLE cards ADD COLUMN archived BOOLEAN NOT NULL DEFAULT FALSE"))
+        if "archived_at" not in columns:
+            conn.execute(text(f"ALTER TABLE cards ADD COLUMN archived_at {ts_type}"))
 
 
 app = FastAPI(title="English Flashcards", lifespan=lifespan)
@@ -178,6 +191,21 @@ def update_card(
     return card
 
 
+@app.post("/api/cards/{card_id}/archive", response_model=CardOut)
+def archive_card(
+    card_id: int,
+    data: ArchiveIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    card = get_own_card(card_id, user, db)
+    card.archived = data.archived
+    card.archived_at = utcnow() if data.archived else None
+    db.commit()
+    db.refresh(card)
+    return card
+
+
 @app.delete("/api/cards/{card_id}", status_code=204)
 def delete_card(card_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     db.delete(get_own_card(card_id, user, db))
@@ -194,7 +222,10 @@ def game_deck(
     db: Session = Depends(get_db),
 ):
     """Перемішана колода. en_uk: бачиш англійське слово, згадуєш переклад; uk_en: навпаки."""
-    cards = list(db.scalars(select(Card).where(Card.user_id == user.id)).all())
+    # Архівні (вже вивчені) слова в гру не потрапляють
+    cards = list(db.scalars(
+        select(Card).where(Card.user_id == user.id, Card.archived.is_(False))
+    ).all())
     random.shuffle(cards)
     deck = []
     for c in cards[:limit]:
@@ -216,6 +247,10 @@ def review_card(
     card = get_own_card(card_id, user, db)
     if data.knew:
         card.correct_count += 1
+        # Слово вгадали вже 10 разів — вважаємо вивченим і прибираємо в архів
+        if card.correct_count >= AUTO_ARCHIVE_AFTER and not card.archived:
+            card.archived = True
+            card.archived_at = utcnow()
     else:
         card.wrong_count += 1
     db.commit()

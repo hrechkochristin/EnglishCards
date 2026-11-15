@@ -8,10 +8,13 @@
 
 Результати кешуються в пам'яті, щоб не смикати API повторно для того самого слова.
 """
+import logging
 import os
 from collections import OrderedDict
 
 import httpx
+
+log = logging.getLogger("uvicorn.error")
 
 SOURCE_LANG = os.getenv("SOURCE_LANG", "en")
 TARGET_LANG = os.getenv("TARGET_LANG", "uk")
@@ -65,6 +68,11 @@ def parse_google(data: dict, word: str) -> list[dict]:
 
 
 def parse_mymemory(data: dict, word: str) -> list[dict]:
+    # При вичерпаному ліміті MyMemory відповідає HTTP 200, але з responseStatus 429/403
+    # і текстом попередження замість перекладу
+    status = str(data.get("responseStatus", "200"))
+    if status != "200":
+        raise ValueError(f"MyMemory responseStatus={status}: {data.get('responseDetails')}")
     variants = []
     main = (data.get("responseData") or {}).get("translatedText") or ""
     if main.isupper():  # MyMemory інколи повертає КАПСОМ
@@ -111,10 +119,13 @@ async def translate(word: str) -> list[dict]:
         for provider in (_google, _mymemory):
             try:
                 variants = await provider(client, word)
-            except (httpx.HTTPError, ValueError):
+            except (httpx.HTTPError, ValueError) as e:
+                log.warning("Перекладач %s не відповів для %r: %s: %s",
+                            provider.__name__, word, type(e).__name__, e)
                 continue
             if variants:
                 break
+            log.warning("Перекладач %s повернув порожній результат для %r", provider.__name__, word)
 
     if not variants:
         raise TranslatorUnavailable("Не вдалося отримати переклад")

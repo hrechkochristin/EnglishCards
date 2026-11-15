@@ -13,6 +13,7 @@
 """
 import logging
 import os
+import time
 from collections import OrderedDict
 
 import httpx
@@ -21,7 +22,6 @@ log = logging.getLogger("uvicorn.error")
 
 SOURCE_LANG = os.getenv("SOURCE_LANG", "en")
 TARGET_LANG = os.getenv("TARGET_LANG", "uk")
-MYMEMORY_EMAIL = os.getenv("MYMEMORY_EMAIL", "")
 
 GOOGLE_URL = "https://translate.googleapis.com/translate_a/single"
 # Той самий endpoint на іншому хості: хмарні сервери (Render тощо) блокують рідше
@@ -32,6 +32,8 @@ MYMEMORY_URL = "https://api.mymemory.translated.net/get"
 
 _TIMEOUT = httpx.Timeout(8.0)
 _CACHE_SIZE = 2000
+_COOLDOWN_SECONDS = 600   # пауза після того, як усі джерела відмовили
+_blocked_until = 0.0
 _cache: "OrderedDict[str, list[dict]]" = OrderedDict()
 
 
@@ -137,8 +139,10 @@ async def _google_chrome(client: httpx.AsyncClient, word: str) -> list[dict]:
 
 async def _mymemory(client: httpx.AsyncClient, word: str) -> list[dict]:
     params = {"q": word, "langpair": f"{SOURCE_LANG}|{TARGET_LANG}"}
-    if MYMEMORY_EMAIL:
-        params["de"] = MYMEMORY_EMAIL
+    # Читаємо тут, а не при імпорті: .env.local підвантажується пізніше (у db.py)
+    email = os.getenv("MYMEMORY_EMAIL", "").strip()
+    if email:
+        params["de"] = email
     r = await client.get(MYMEMORY_URL, params=params)
     r.raise_for_status()
     return parse_mymemory(r.json(), word)
@@ -150,6 +154,11 @@ async def translate(word: str) -> list[dict]:
     if key in _cache:
         _cache.move_to_end(key)
         return _cache[key]
+
+    global _blocked_until
+    if time.monotonic() < _blocked_until:
+        # Нещодавно всі джерела відповіли 429/капчею — не смикаємо їх, браузер перекладе сам
+        raise TranslatorUnavailable("Перекладач тимчасово заблоковано")
 
     async with httpx.AsyncClient(timeout=_TIMEOUT, headers={"User-Agent": "Mozilla/5.0"}) as client:
         variants: list[dict] = []
@@ -165,6 +174,8 @@ async def translate(word: str) -> list[dict]:
             log.warning("Перекладач %s повернув порожній результат для %r", provider.__name__, word)
 
     if not variants:
+        _blocked_until = time.monotonic() + _COOLDOWN_SECONDS
+        log.warning("Усі перекладачі недоступні — пауза %d с, переклад іде з браузера", _COOLDOWN_SECONDS)
         raise TranslatorUnavailable("Не вдалося отримати переклад")
 
     _cache[key] = variants

@@ -1,5 +1,4 @@
 from datetime import datetime
-import unicodedata
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -16,20 +15,17 @@ class RegisterCredentials(Credentials):
     @field_validator("password")
     @classmethod
     def validate_password(cls, password: str) -> str:
-        has_uppercase_cyrillic = any(
-            char.isupper() and "CYRILLIC" in unicodedata.name(char, "")
+        if any(
+            char.isalpha() and not ("A" <= char <= "Z" or "a" <= char <= "z")
             for char in password
-        )
-        has_lowercase_cyrillic = any(
-            char.islower() and "CYRILLIC" in unicodedata.name(char, "")
-            for char in password
-        )
-        if not has_uppercase_cyrillic or not has_lowercase_cyrillic or not any(
-            char.isdigit() for char in password
         ):
-            raise ValueError(
-                "Пароль має містити велику й малу кириличні літери та цифру"
-            )
+            raise ValueError("Пароль може містити лише латинські літери")
+        if not any("A" <= char <= "Z" for char in password):
+            raise ValueError("Пароль має містити велику латинську літеру")
+        if not any("a" <= char <= "z" for char in password):
+            raise ValueError("Пароль має містити малу латинську літеру")
+        if not any("0" <= char <= "9" for char in password):
+            raise ValueError("Пароль має містити цифру")
         return password
 
 

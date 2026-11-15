@@ -4,47 +4,175 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>English Flashcards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#f6f5f2; --card:#fff; --ink:#1f2328; --muted:#6b7280; --accent:#2f6fde; --ok:#1f9d55; --bad:#d64545; --line:#e5e3dd; }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
-  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
-  h1 { font-size: 22px; margin: 0 0 16px; }
-  .box { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
-  input[type=text], input[type=password] { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-size:16px; }
-  button { padding:10px 14px; border:0; border-radius:8px; background:var(--accent); color:#fff; font-size:15px; cursor:pointer; }
-  button.secondary { background:#e9e7e1; color:var(--ink); }
-  button.danger { background:transparent; color:var(--bad); padding:4px 8px; }
-  button:disabled { opacity:.5; cursor:default; }
-  .row { display:flex; gap:8px; align-items:center; }
-  .row > input { flex:1; }
-  .stack > * + * { margin-top:10px; }
-  .tabs { display:flex; gap:6px; margin-bottom:16px; }
-  .tabs button { background:#e9e7e1; color:var(--ink); }
-  .tabs button.active { background:var(--ink); color:#fff; }
+  :root {
+    --bg1:#e8f4fd; --bg2:#d6ebfa;
+    --card:#ffffff; --card-2:#eef7fe; --card-3:#d9ecfb;
+    --ink:#2b3036; --ink-soft:#4a525c; --muted:#7a8592;
+    --accent:#3b9ae1; --accent-dark:#2b7fc0; --accent-soft:#e3f1fc;
+    --ok:#2fb37a; --bad:#e25c5c;
+    --line:#e3edf5;
+    --shadow:0 1px 2px rgba(30,60,90,.06), 0 8px 24px rgba(40,90,140,.10);
+    --shadow-lg:0 2px 4px rgba(30,60,90,.06), 0 18px 40px rgba(40,90,140,.16);
+    --radius:20px;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; min-height:100vh;
+    font-family:"Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(1200px 600px at 10% -10%, #ffffff 0%, transparent 60%),
+      radial-gradient(900px 500px at 110% 10%, #cfe7fa 0%, transparent 60%),
+      linear-gradient(180deg, var(--bg1), var(--bg2));
+    background-attachment:fixed;
+    -webkit-font-smoothing:antialiased;
+  }
+  main { max-width:680px; margin:0 auto; padding:32px 16px 72px; isolation:isolate; }
+  h1 { font-size:24px; font-weight:800; letter-spacing:-.02em; margin:0; color:var(--ink); }
+  h1 .dot { color:var(--accent); }
+  a { color:var(--accent-dark); font-weight:600; text-decoration:none; }
+  a:hover { text-decoration:underline; }
+
+  /* ---------- Картка на картці ---------- */
+  .box {
+    position:relative;
+    background:var(--card);
+    border:1px solid rgba(255,255,255,.9);
+    border-radius:var(--radius);
+    padding:20px;
+    margin-bottom:32px;
+    box-shadow:var(--shadow);
+  }
+  .box::before, .box::after {
+    content:""; position:absolute; inset:0; z-index:-1;
+    border-radius:var(--radius); pointer-events:none;
+  }
+  .box::before { background:var(--card-2); transform:translateY(9px) scale(.96); box-shadow:var(--shadow); }
+  .box::after  { background:var(--card-3); transform:translateY(18px) scale(.92); }
+
+  input[type=text], input[type=password] {
+    width:100%; padding:12px 14px; font:inherit; font-size:16px; color:var(--ink);
+    background:#f7fbfe; border:1.5px solid var(--line); border-radius:12px;
+    transition:border-color .15s, box-shadow .15s, background .15s;
+  }
+  input::placeholder { color:#a3aeb9; }
+  input[type=text]:focus, input[type=password]:focus {
+    outline:none; background:#fff; border-color:var(--accent); box-shadow:0 0 0 4px rgba(59,154,225,.15);
+  }
+  input[type=checkbox] { width:18px; height:18px; accent-color:var(--accent); cursor:pointer; }
+
+  button {
+    padding:11px 18px; border:0; border-radius:12px; font:inherit; font-size:15px; font-weight:700;
+    background:var(--ink); color:#fff; cursor:pointer;
+    box-shadow:0 4px 12px rgba(43,48,54,.18);
+    transition:transform .12s, box-shadow .12s, background .15s;
+  }
+  button:hover { transform:translateY(-1px); box-shadow:0 6px 16px rgba(43,48,54,.22); }
+  button:active { transform:translateY(0); }
+  button.primary { background:var(--accent); box-shadow:0 4px 12px rgba(59,154,225,.35); }
+  button.primary:hover { background:var(--accent-dark); }
+  button.secondary { background:var(--accent-soft); color:var(--ink); box-shadow:none; }
+  button.secondary:hover { background:#d4e9fa; box-shadow:none; }
+  button.ok { background:var(--ok); box-shadow:0 4px 12px rgba(47,179,122,.3); }
+  button.bad { background:var(--bad); box-shadow:0 4px 12px rgba(226,92,92,.3); }
+  button.link, button.danger { background:transparent; box-shadow:none; padding:6px 10px; font-size:14px; font-weight:600; border-radius:8px; }
+  button.link { color:var(--accent-dark); }
+  button.danger { color:var(--bad); }
+  button.link:hover { background:var(--accent-soft); box-shadow:none; transform:none; }
+  button.danger:hover { background:#fdecec; box-shadow:none; transform:none; }
+  button:disabled { opacity:.5; cursor:default; transform:none; }
+
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .row > input { flex:1; min-width:180px; }
+  .stack > * + * { margin-top:12px; }
+
+  .tabs {
+    display:flex; gap:4px; padding:5px; margin-bottom:24px;
+    background:rgba(255,255,255,.6); backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,.9); border-radius:16px; box-shadow:var(--shadow);
+  }
+  .tabs button { flex:1; background:transparent; color:var(--ink-soft); box-shadow:none; padding:10px 8px; font-size:14px; }
+  .tabs button:hover { background:rgba(255,255,255,.8); transform:none; box-shadow:none; }
+  .tabs button.active { background:var(--ink); color:#fff; box-shadow:0 4px 12px rgba(43,48,54,.2); }
+
   .muted { color:var(--muted); font-size:14px; }
-  .error { color:var(--bad); font-size:14px; min-height:18px; }
-  .variants label { display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--line); }
-  .pos { font-size:12px; color:var(--muted); margin-left:auto; }
-  .card-item { display:flex; justify-content:space-between; gap:8px; padding:10px 0; border-bottom:1px solid var(--line); }
-  .card-item .word { font-weight:600; }
-  .flash { text-align:center; padding:40px 16px; }
-  .flash .q { font-size:30px; font-weight:600; }
-  .flash .a { font-size:22px; color:var(--accent); margin-top:16px; min-height:30px; }
+  .error { color:var(--bad); font-size:14px; min-height:18px; font-weight:600; }
+
+  .variants { display:flex; flex-direction:column; gap:6px; }
+  .variants label {
+    display:flex; gap:10px; align-items:center; padding:10px 12px; cursor:pointer;
+    background:#f7fbfe; border:1.5px solid var(--line); border-radius:12px; font-weight:600;
+    transition:border-color .15s, background .15s;
+  }
+  .variants label:hover { border-color:#bcdcf4; }
+  .variants label:has(input:checked) { background:var(--accent-soft); border-color:var(--accent); }
+  .pos { font-size:12px; color:var(--muted); margin-left:auto; font-weight:500;
+         background:#fff; padding:2px 8px; border-radius:999px; border:1px solid var(--line); }
+
+  /* Картки у списку — кожна теж «стоїть на картці» */
+  #cardsList { position:relative; z-index:0; display:flex; flex-direction:column; gap:22px; margin-top:16px; padding:0 8px 10px 0; }
+  .card-item {
+    position:relative; display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
+    padding:16px 16px 16px 22px; background:#fff; border-radius:16px;
+    border:1px solid var(--line); box-shadow:0 2px 8px rgba(40,90,140,.08);
+    transition:box-shadow .15s, border-color .15s;
+  }
+  .card-item::before {
+    content:""; position:absolute; inset:0; z-index:-1; border-radius:16px;
+    background:var(--card-3); transform:translate(6px, 7px) rotate(1.2deg);
+    transition:transform .2s;
+  }
+  .card-item::after {
+    content:""; position:absolute; left:0; top:16px; bottom:16px; width:4px; border-radius:0 4px 4px 0;
+    background:var(--accent);
+  }
+  .card-item:hover { border-color:#cfe4f6; box-shadow:0 8px 20px rgba(40,90,140,.12); }
+  .card-item:hover::before { transform:translate(9px, 10px) rotate(2.2deg); }
+  .card-item .word { font-weight:800; font-size:18px; color:var(--ink); letter-spacing:-.01em; }
+  .card-item .tr { color:var(--ink-soft); margin-top:2px; }
+  .card-item .muted { margin-top:6px; font-size:13px; }
+  .card-item .actions { display:flex; gap:2px; flex-shrink:0; }
+  .card-item .variants { margin:10px 0; }
+
+  /* Гра: велика картка на стосі карток */
+  .flash { text-align:center; padding:56px 20px 40px; min-height:320px;
+           display:flex; flex-direction:column; justify-content:center; box-shadow:var(--shadow-lg); margin-top:12px; }
+  .flash::before { transform:translateY(10px) rotate(-2.2deg); }
+  .flash::after  { transform:translateY(16px) rotate(2.6deg); }
+  .flash > .muted { position:absolute; top:18px; left:0; right:0; font-weight:700; letter-spacing:.06em; }
+  .flash .q { font-size:38px; font-weight:800; letter-spacing:-.02em; color:var(--ink); word-break:break-word; }
+  .flash .a { font-size:22px; font-weight:700; color:var(--accent-dark); margin-top:16px; min-height:30px; }
+  .flash .a:not(:empty) { animation:pop .25s ease-out; }
+  @keyframes pop { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+
   .hidden { display:none !important; }
-  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
+  .user-chip { background:rgba(255,255,255,.7); border:1px solid rgba(255,255,255,.9); padding:6px 12px; border-radius:999px; box-shadow:var(--shadow); }
+  #who { color:var(--ink); font-weight:700; }
+
+  #auth { max-width:420px; margin:8vh auto 0; padding:28px; }
+  #auth h1 { font-size:28px; margin-bottom:4px; }
+
+  @media (max-width:480px) {
+    .flash .q { font-size:30px; }
+    .tabs button { font-size:13px; padding:9px 4px; }
+  }
 </style>
 </head>
 <body>
 <main>
   <!-- Вхід / реєстрація -->
   <section id="auth" class="box stack hidden">
-    <h1>English Flashcards</h1>
+    <h1>English Flashcards<span class="dot">.</span></h1>
     <input id="username" type="text" placeholder="Логін (латиницею)" autocomplete="username">
     <input id="password" type="password" placeholder="Пароль (від 8 символів)" autocomplete="current-password">
-    <div class="muted">Для реєстрації: велика й мала кириличні літери та цифра. Крапка й підкреслення не обов’язкові.</div>
+    <div class="muted">Для реєстрації: велика й мала латинські літери та цифра. Мінімум 8 символів; крапка й підкреслення не обов’язкові.</div>
     <div class="row">
-      <button id="loginBtn">Увійти</button>
+      <button id="loginBtn" class="primary">Увійти</button>
       <button id="registerBtn" class="secondary">Зареєструватися</button>
     </div>
     <div id="authError" class="error"></div>
@@ -53,8 +181,8 @@
   <!-- Застосунок -->
   <section id="app" class="hidden">
     <div class="topbar">
-      <h1>English Flashcards</h1>
-      <span class="muted"><span id="who"></span> · <a href="#" id="logout">вийти</a></span>
+      <h1>English Flashcards<span class="dot">.</span></h1>
+      <span class="muted user-chip"><span id="who"></span> · <a href="#" id="logout">вийти</a></span>
     </div>
     <div class="tabs">
       <button data-tab="cards" class="active">Мої картки</button>
@@ -66,7 +194,7 @@
       <div class="box stack">
         <div class="row">
           <input id="newWord" type="text" placeholder="Англійське слово, напр. run">
-          <button id="findBtn">Знайти переклад</button>
+          <button id="findBtn" class="primary">Знайти переклад</button>
         </div>
         <div id="variantsBlock" class="hidden stack">
           <div class="muted">Позначте переклади, які хочете бачити. Якщо нічого не позначити, збережемо 3 найпопулярніші.</div>
@@ -75,7 +203,7 @@
             <input id="customTr" type="text" placeholder="Свій варіант перекладу">
             <button id="addCustomBtn" class="secondary">Додати</button>
           </div>
-          <button id="saveCardBtn">Зберегти картку</button>
+          <button id="saveCardBtn" class="primary">Зберегти картку</button>
         </div>
         <div id="cardError" class="error"></div>
       </div>
@@ -91,10 +219,10 @@
         <div class="q" id="gameQ"></div>
         <div class="a" id="gameA"></div>
         <div class="row" style="justify-content:center; margin-top:24px;">
-          <button id="showBtn">Показати відповідь</button>
-          <button id="knewBtn" class="hidden" style="background:var(--ok)">Знав ✓</button>
-          <button id="didntBtn" class="hidden" style="background:var(--bad)">Не знав ✗</button>
-          <button id="restartBtn" class="hidden">Грати ще</button>
+          <button id="showBtn" class="primary">Показати відповідь</button>
+          <button id="knewBtn" class="hidden ok">Знав ✓</button>
+          <button id="didntBtn" class="hidden bad">Не знав ✗</button>
+          <button id="restartBtn" class="hidden primary">Грати ще</button>
         </div>
       </div>
     </div>
@@ -220,12 +348,12 @@ async function loadCards() {
 function renderCard(c) {
   const info = el("div", {},
     el("div", { className: "word", textContent: c.word }),
-    el("div", { textContent: c.translations.join(", ") }),
+    el("div", { className: "tr", textContent: c.translations.join(", ") }),
     el("div", { className: "muted", textContent: `✓ ${c.correct_count}  ✗ ${c.wrong_count}` }),
   );
-  const editBtn = el("button", { className: "danger", textContent: "змінити", style: "color:var(--accent)" });
+  const editBtn = el("button", { className: "link", textContent: "змінити" });
   const delBtn = el("button", { className: "danger", textContent: "видалити" });
-  const item = el("div", { className: "card-item" }, info, el("div", {}, editBtn, delBtn));
+  const item = el("div", { className: "card-item" }, info, el("div", { className: "actions" }, editBtn, delBtn));
 
   delBtn.onclick = async () => {
     if (!confirm(`Видалити «${c.word}»?`)) return;
@@ -238,7 +366,7 @@ function renderCard(c) {
       const cb = el("input", { type: "checkbox", value: o, checked: c.translations.includes(o) });
       list.append(el("label", {}, cb, el("span", { textContent: o })));
     });
-    const save = el("button", { textContent: "Зберегти" });
+    const save = el("button", { className: "primary", textContent: "Зберегти" });
     save.onclick = async () => {
       const chosen = [...list.querySelectorAll("input:checked")].map(i => i.value);
       if (!chosen.length) return alert("Оберіть хоча б один переклад");

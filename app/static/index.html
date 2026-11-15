@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>English Flashcards</title>
+<style>
+  :root { --bg:#f6f5f2; --card:#fff; --ink:#1f2328; --muted:#6b7280; --accent:#2f6fde; --ok:#1f9d55; --bad:#d64545; --line:#e5e3dd; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 16px; }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  input[type=text], input[type=password] { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-size:16px; }
+  button { padding:10px 14px; border:0; border-radius:8px; background:var(--accent); color:#fff; font-size:15px; cursor:pointer; }
+  button.secondary { background:#e9e7e1; color:var(--ink); }
+  button.danger { background:transparent; color:var(--bad); padding:4px 8px; }
+  button:disabled { opacity:.5; cursor:default; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row > input { flex:1; }
+  .stack > * + * { margin-top:10px; }
+  .tabs { display:flex; gap:6px; margin-bottom:16px; }
+  .tabs button { background:#e9e7e1; color:var(--ink); }
+  .tabs button.active { background:var(--ink); color:#fff; }
+  .muted { color:var(--muted); font-size:14px; }
+  .error { color:var(--bad); font-size:14px; min-height:18px; }
+  .variants label { display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--line); }
+  .pos { font-size:12px; color:var(--muted); margin-left:auto; }
+  .card-item { display:flex; justify-content:space-between; gap:8px; padding:10px 0; border-bottom:1px solid var(--line); }
+  .card-item .word { font-weight:600; }
+  .flash { text-align:center; padding:40px 16px; }
+  .flash .q { font-size:30px; font-weight:600; }
+  .flash .a { font-size:22px; color:var(--accent); margin-top:16px; min-height:30px; }
+  .hidden { display:none !important; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+</style>
+</head>
+<body>
+<main>
+  <!-- Вхід / реєстрація -->
+  <section id="auth" class="box stack hidden">
+    <h1>English Flashcards</h1>
+    <input id="username" type="text" placeholder="Логін (латиницею)" autocomplete="username">
+    <input id="password" type="password" placeholder="Пароль (від 8 символів)" autocomplete="current-password">
+    <div class="muted">Для реєстрації: велика й мала кириличні літери та цифра. Крапка й підкреслення не обов’язкові.</div>
+    <div class="row">
+      <button id="loginBtn">Увійти</button>
+      <button id="registerBtn" class="secondary">Зареєструватися</button>
+    </div>
+    <div id="authError" class="error"></div>
+  </section>
+
+  <!-- Застосунок -->
+  <section id="app" class="hidden">
+    <div class="topbar">
+      <h1>English Flashcards</h1>
+      <span class="muted"><span id="who"></span> · <a href="#" id="logout">вийти</a></span>
+    </div>
+    <div class="tabs">
+      <button data-tab="cards" class="active">Мої картки</button>
+      <button data-tab="en_uk">Гра EN → UA</button>
+      <button data-tab="uk_en">Гра UA → EN</button>
+    </div>
+
+    <div id="tab-cards">
+      <div class="box stack">
+        <div class="row">
+          <input id="newWord" type="text" placeholder="Англійське слово, напр. run">
+          <button id="findBtn">Знайти переклад</button>
+        </div>
+        <div id="variantsBlock" class="hidden stack">
+          <div class="muted">Позначте переклади, які хочете бачити. Якщо нічого не позначити, збережемо 3 найпопулярніші.</div>
+          <div id="variants" class="variants"></div>
+          <div class="row">
+            <input id="customTr" type="text" placeholder="Свій варіант перекладу">
+            <button id="addCustomBtn" class="secondary">Додати</button>
+          </div>
+          <button id="saveCardBtn">Зберегти картку</button>
+        </div>
+        <div id="cardError" class="error"></div>
+      </div>
+      <div class="box">
+        <div class="muted" id="cardsCount"></div>
+        <div id="cardsList"></div>
+      </div>
+    </div>
+
+    <div id="tab-game" class="hidden">
+      <div class="box flash">
+        <div class="muted" id="gameProgress"></div>
+        <div class="q" id="gameQ"></div>
+        <div class="a" id="gameA"></div>
+        <div class="row" style="justify-content:center; margin-top:24px;">
+          <button id="showBtn">Показати відповідь</button>
+          <button id="knewBtn" class="hidden" style="background:var(--ok)">Знав ✓</button>
+          <button id="didntBtn" class="hidden" style="background:var(--bad)">Не знав ✗</button>
+          <button id="restartBtn" class="hidden">Грати ще</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let token = localStorage.getItem("token");
+let currentWord = null;     // слово, для якого показані варіанти
+let deck = [], deckPos = 0, score = 0, gameMode = "en_uk";
+
+async function api(path, options = {}) {
+  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+  if (token) headers.Authorization = "Bearer " + token;
+  const res = await fetch(path, { ...options, headers });
+  if (res.status === 401 && token) { logout(); throw new Error("Сесія завершилась, увійдіть знову"); }
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const d = data.detail;
+    throw new Error(Array.isArray(d) ? d.map(e => e.msg).join("; ") : (d || "Помилка"));
+  }
+  return data;
+}
+
+function el(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props);
+  children.forEach(c => node.append(c));
+  return node;
+}
+
+// ---------- Auth ----------
+async function auth(kind) {
+  $("authError").textContent = "";
+  try {
+    const data = await api("/api/auth/" + kind, {
+      method: "POST",
+      body: JSON.stringify({ username: $("username").value.trim(), password: $("password").value }),
+    });
+    token = data.token;
+    localStorage.setItem("token", token);
+    showApp(data.username);
+  } catch (e) { $("authError").textContent = e.message; }
+}
+$("loginBtn").onclick = () => auth("login");
+$("registerBtn").onclick = () => auth("register");
+$("password").onkeydown = (e) => { if (e.key === "Enter") auth("login"); };
+
+function logout() {
+  token = null; localStorage.removeItem("token");
+  $("app").classList.add("hidden"); $("auth").classList.remove("hidden");
+}
+$("logout").onclick = (e) => { e.preventDefault(); logout(); };
+
+function showApp(username) {
+  $("who").textContent = username;
+  $("auth").classList.add("hidden"); $("app").classList.remove("hidden");
+  loadCards();
+}
+
+// ---------- Tabs ----------
+document.querySelectorAll(".tabs button").forEach(btn => btn.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("active", b === btn));
+  const tab = btn.dataset.tab;
+  $("tab-cards").classList.toggle("hidden", tab !== "cards");
+  $("tab-game").classList.toggle("hidden", tab === "cards");
+  if (tab !== "cards") startGame(tab);
+});
+
+// ---------- Створення картки ----------
+function addVariantRow(text, pos, checked = false) {
+  const exists = [...$("variants").querySelectorAll("input")].some(i => i.value.toLowerCase() === text.toLowerCase());
+  if (exists) return;
+  const cb = el("input", { type: "checkbox", value: text, checked });
+  $("variants").append(el("label", {}, cb, el("span", { textContent: text }), el("span", { className: "pos", textContent: pos || "" })));
+}
+
+async function findTranslations() {
+  const word = $("newWord").value.trim();
+  if (!word) return;
+  $("cardError").textContent = ""; $("findBtn").disabled = true;
+  try {
+    const data = await api("/api/translate?word=" + encodeURIComponent(word));
+    currentWord = data.word;
+    $("variants").innerHTML = "";
+    data.variants.forEach(v => addVariantRow(v.text, v.pos));
+    $("variantsBlock").classList.remove("hidden");
+  } catch (e) {
+    // Перекладач недоступний — даємо ввести переклад вручну
+    currentWord = word; $("variants").innerHTML = "";
+    $("variantsBlock").classList.remove("hidden");
+    $("cardError").textContent = e.message;
+  } finally { $("findBtn").disabled = false; }
+}
+$("findBtn").onclick = findTranslations;
+$("newWord").onkeydown = (e) => { if (e.key === "Enter") findTranslations(); };
+
+$("addCustomBtn").onclick = () => {
+  const t = $("customTr").value.trim();
+  if (t) { addVariantRow(t, "свій", true); $("customTr").value = ""; }
+};
+
+$("saveCardBtn").onclick = async () => {
+  const chosen = [...$("variants").querySelectorAll("input:checked")].map(i => i.value);
+  $("cardError").textContent = "";
+  try {
+    await api("/api/cards", { method: "POST", body: JSON.stringify({ word: currentWord, translations: chosen }) });
+    $("newWord").value = ""; $("variants").innerHTML = "";
+    $("variantsBlock").classList.add("hidden"); currentWord = null;
+    loadCards();
+  } catch (e) { $("cardError").textContent = e.message; }
+};
+
+// ---------- Список карток ----------
+async function loadCards() {
+  const cards = await api("/api/cards");
+  $("cardsCount").textContent = cards.length ? `Карток: ${cards.length}` : "Карток ще немає — додайте першу.";
+  $("cardsList").innerHTML = "";
+  cards.forEach(c => $("cardsList").append(renderCard(c)));
+}
+
+function renderCard(c) {
+  const info = el("div", {},
+    el("div", { className: "word", textContent: c.word }),
+    el("div", { textContent: c.translations.join(", ") }),
+    el("div", { className: "muted", textContent: `✓ ${c.correct_count}  ✗ ${c.wrong_count}` }),
+  );
+  const editBtn = el("button", { className: "danger", textContent: "змінити", style: "color:var(--accent)" });
+  const delBtn = el("button", { className: "danger", textContent: "видалити" });
+  const item = el("div", { className: "card-item" }, info, el("div", {}, editBtn, delBtn));
+
+  delBtn.onclick = async () => {
+    if (!confirm(`Видалити «${c.word}»?`)) return;
+    await api(`/api/cards/${c.id}`, { method: "DELETE" }); loadCards();
+  };
+  editBtn.onclick = () => {
+    // Редагування: усі збережені варіанти з галочками на обраних
+    const list = el("div", { className: "variants" });
+    c.options.forEach(o => {
+      const cb = el("input", { type: "checkbox", value: o, checked: c.translations.includes(o) });
+      list.append(el("label", {}, cb, el("span", { textContent: o })));
+    });
+    const save = el("button", { textContent: "Зберегти" });
+    save.onclick = async () => {
+      const chosen = [...list.querySelectorAll("input:checked")].map(i => i.value);
+      if (!chosen.length) return alert("Оберіть хоча б один переклад");
+      await api(`/api/cards/${c.id}`, { method: "PUT", body: JSON.stringify({ translations: chosen }) });
+      loadCards();
+    };
+    info.replaceChildren(el("div", { className: "word", textContent: c.word }), list, save);
+  };
+  return item;
+}
+
+// ---------- Гра ----------
+async function startGame(mode) {
+  gameMode = mode;
+  deck = await api(`/api/game/deck?mode=${mode}&limit=500`);
+  deckPos = 0; score = 0;
+  if (!deck.length) {
+    $("gameProgress").textContent = ""; $("gameQ").textContent = "Спершу додайте кілька карток";
+    $("gameA").textContent = ""; setButtons("none"); return;
+  }
+  showQuestion();
+}
+
+function setButtons(state) {
+  $("showBtn").classList.toggle("hidden", state !== "question");
+  $("knewBtn").classList.toggle("hidden", state !== "answer");
+  $("didntBtn").classList.toggle("hidden", state !== "answer");
+  $("restartBtn").classList.toggle("hidden", state !== "done");
+}
+
+function showQuestion() {
+  const item = deck[deckPos];
+  $("gameProgress").textContent = `${deckPos + 1} / ${deck.length}`;
+  $("gameQ").textContent = item.question;
+  $("gameA").textContent = "";
+  setButtons("question");
+}
+
+$("showBtn").onclick = () => { $("gameA").textContent = deck[deckPos].answer; setButtons("answer"); };
+
+async function answer(knew) {
+  if (knew) score++;
+  api(`/api/cards/${deck[deckPos].card_id}/review`, { method: "POST", body: JSON.stringify({ knew }) }).catch(() => {});
+  deckPos++;
+  if (deckPos < deck.length) return showQuestion();
+  $("gameProgress").textContent = "";
+  $("gameQ").textContent = `Готово! ${score} з ${deck.length}`;
+  $("gameA").textContent = "";
+  setButtons("done");
+}
+$("knewBtn").onclick = () => answer(true);
+$("didntBtn").onclick = () => answer(false);
+$("restartBtn").onclick = () => startGame(gameMode);
+
+// ---------- Старт ----------
+if (token) api("/api/me").then(u => showApp(u.username)).catch(logout);
+else logout();
+</script>
+</body>
+</html>

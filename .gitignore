@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+flashcards.db
+.env
+.neon
+node_modules/
+.env.local

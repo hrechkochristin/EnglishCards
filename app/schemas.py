@@ -4,9 +4,27 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+# "@" і "+" дозволені, щоб як логін можна було використати пошту
+USERNAME_ALLOWED = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-@+")
+
+
 class Credentials(BaseModel):
-    username: str = Field(min_length=3, max_length=50, pattern=r"^[A-Za-z0-9_.-]+$")
+    username: str
     password: str = Field(min_length=6, max_length=128)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, username: str) -> str:
+        username = username.strip()
+        if not 3 <= len(username) <= 50:
+            raise ValueError("Логін має бути від 3 до 50 символів")
+        bad = sorted({ch for ch in username if ch not in USERNAME_ALLOWED})
+        if bad:
+            shown = " ".join("пробіл" if ch == " " else ch for ch in bad)
+            raise ValueError(
+                f"Логін може містити лише латинські літери, цифри та _ . - @ + (зайві символи: {shown})"
+            )
+        return username
 
 
 class RegisterCredentials(Credentials):

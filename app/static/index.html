@@ -154,6 +154,19 @@
   .user-chip { background:rgba(255,255,255,.7); border:1px solid rgba(255,255,255,.9); padding:6px 12px; border-radius:999px; box-shadow:var(--shadow); }
   #who { color:var(--ink); font-weight:700; }
 
+  .pw-wrap { position:relative; }
+  .pw-wrap input { padding-right:48px; }
+  .pw-eye {
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    width:36px; height:36px; padding:0; display:grid; place-items:center;
+    background:transparent; color:var(--muted); box-shadow:none; border-radius:10px;
+  }
+  .pw-eye:hover { background:var(--accent-soft); color:var(--ink); box-shadow:none; transform:translateY(-50%); }
+  .pw-eye .slash { display:none; }
+  .pw-eye.on .slash { display:inline; }
+  .pw-eye.on { color:var(--accent-dark); }
+  #auth code { background:var(--accent-soft); padding:1px 6px; border-radius:6px; color:var(--ink); }
+
   #auth { max-width:420px; margin:8vh auto 0; padding:28px; }
   #auth h1 { font-size:28px; margin-bottom:4px; }
 
@@ -168,9 +181,20 @@
   <!-- Вхід / реєстрація -->
   <section id="auth" class="box stack hidden">
     <h1>English Flashcards<span class="dot">.</span></h1>
-    <input id="username" type="text" placeholder="Логін (латиницею)" autocomplete="username">
-    <input id="password" type="password" placeholder="Пароль (від 8 символів)" autocomplete="current-password">
-    <div class="muted">Для реєстрації: велика й мала латинські літери та цифра. Мінімум 8 символів; крапка й підкреслення не обов’язкові.</div>
+    <input id="username" type="text" placeholder="Логін або пошта" autocomplete="username">
+    <div class="pw-wrap">
+      <input id="password" type="password" placeholder="Пароль (від 8 символів)" autocomplete="current-password">
+      <button id="pwToggle" type="button" class="pw-eye" aria-label="Показати пароль" title="Показати пароль">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>
+          <line class="slash" x1="3" y1="3" x2="21" y2="21"/>
+        </svg>
+      </button>
+    </div>
+    <div class="muted">
+      <b>Логін:</b> латинські літери, цифри, можна <code>_ . - @</code> — підійде й пошта. Без пробілів, 3–50 символів.<br>
+      <b>Пароль для реєстрації:</b> від 8 символів, має бути велика й мала латинські літери та цифра.
+    </div>
     <div class="row">
       <button id="loginBtn" class="primary">Увійти</button>
       <button id="registerBtn" class="secondary">Зареєструватися</button>
@@ -244,9 +268,19 @@ async function api(path, options = {}) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const d = data.detail;
-    throw new Error(Array.isArray(d) ? d.map(e => e.msg).join("; ") : (d || "Помилка"));
+    throw new Error(Array.isArray(d) ? d.map(humanError).join("; ") : (d || "Помилка"));
   }
   return data;
+}
+
+// Перекладає помилки валідації сервера людською мовою
+function humanError(e) {
+  const field = (e.loc || []).at(-1);
+  const name = { username: "Логін", password: "Пароль" }[field] || "Поле";
+  if (e.type === "string_too_short") return `${name} закороткий: мінімум ${e.ctx?.min_length} символів`;
+  if (e.type === "string_too_long") return `${name} задовгий: максимум ${e.ctx?.max_length} символів`;
+  if (e.type === "missing") return `${name}: обов’язкове поле`;
+  return String(e.msg || "Помилка").replace(/^Value error,\s*/, "");
 }
 
 function el(tag, props = {}, ...children) {
@@ -271,6 +305,13 @@ async function auth(kind) {
 $("loginBtn").onclick = () => auth("login");
 $("registerBtn").onclick = () => auth("register");
 $("password").onkeydown = (e) => { if (e.key === "Enter") auth("login"); };
+$("pwToggle").onclick = () => {
+  const show = $("password").type === "password";
+  $("password").type = show ? "text" : "password";
+  $("pwToggle").classList.toggle("on", show);
+  const label = show ? "Сховати пароль" : "Показати пароль";
+  $("pwToggle").setAttribute("aria-label", label); $("pwToggle").title = label;
+};
 
 function logout() {
   token = null; localStorage.removeItem("token");
